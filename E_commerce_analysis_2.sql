@@ -329,3 +329,43 @@ count(distinct case when billing_page = 1  then sessions else null  end) as to_b
 count(distinct case when thank_you_page = 1  then sessions else null  end) as to_thank_you
 from session_made_it_flagged
 group by 1;
+
+-- Quantifying the impact of our billing test  
+-- In marketing, “lift” represents an increase in sales in response to some form of advertising or promotion. 
+-- we want to check what is the increase in sales after introducing billing-2 for the month of sep and nov
+create temporary table lift_calculation
+select
+b.*,
+revenue_per_billing_seen - lag(b.revenue_per_billing_seen,1)over(order by billing_version_seen) as lift
+from
+(select 
+	a.pageview_url as billing_version_seen,
+	count(distinct a.website_session_id) as sessions,
+    round(sum(a.price_usd)/count(distinct a.website_session_id),2) as revenue_per_billing_seen
+from
+(select 
+ p.website_session_id,
+ p.pageview_url,
+ o.order_id,
+ o.price_usd
+from website_pageviews p 
+left join orders o on p.website_session_id = o.website_session_id
+where pageview_url in ('/billing','/billing-2')
+and p.created_at between '2012-09-10' and '2012-11-10')a
+group by 1)b;
+
+
+-- we have calculated the lift, now we want to find vlaue of billing test
+-- See how many sessions we expect to get in a month (we do this by counting the sessions for the past month).
+-- Then, we multiply our "improvement per session" (aka "lift per session") by the number of  sessions we see in a month to
+--  estimate the total improvement generated for the business on a monthly basis,i.e., both billing and billing-2
+
+SELECT
+COUNT(website_session_id)*8.34  AS vallue_of_billing_test   -- 9098.94
+FROM website_pageviews
+WHERE website_pageviews.pageview_url IN ('/billing','/billing-2')
+AND created_at BETWEEN '2012-10-27' AND '2012-11-27'; -- past month 
+
+-- 1091 billing sessions past month
+-- LIFT: $8.34 per billing session
+-- VALUE OF BILLING TEST: $9098.94 over the past month
